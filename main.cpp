@@ -1,51 +1,85 @@
-// Copyright 2011 The Emscripten Authors.  All rights reserved.
-// Emscripten is available under two separate licenses, the MIT license and the
-// University of Illinois/NCSA Open Source License.  Both these licenses can be
-// found in the LICENSE file.
-
-#include <stdio.h>
-#include <SDL/SDL.h>
-
+#include <SDL2/SDL.h>
+#include <SDL2/SDL2_gfxPrimitives.h>
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
 
-int main(int argc, char **argv)
+SDL_Window *window;
+SDL_Renderer *renderer;
+
+SDL_Point center = {.x = 100, .y = 100};
+const int radius = 100;
+
+void redraw()
 {
-    printf("hello, world!\n");
+    SDL_SetRenderDrawColor(renderer, /* RGBA: black */ 0x00, 0x00, 0x00, 0xFF);
+    SDL_RenderClear(renderer);
+    filledCircleRGBA(renderer, center.x, center.y, radius,
+                     /* RGBA: green */ 0x00, 0x80, 0x00, 0xFF);
+    SDL_RenderPresent(renderer);
+}
 
-    SDL_Init(SDL_INIT_VIDEO);
-    SDL_Surface *screen = SDL_SetVideoMode(256, 256, 32, SDL_SWSURFACE);
+uint32_t ticksForNextKeyDown = 0;
 
-#ifdef TEST_SDL_LOCK_OPTS
-    EM_ASM("SDL.defaults.copyOnLock = false; SDL.defaults.discardOnLock = true; SDL.defaults.opaqueFrontBuffer = false;");
-#endif
-
-    if (SDL_MUSTLOCK(screen))
-        SDL_LockSurface(screen);
-    for (int i = 0; i < 256; i++)
+bool handle_events()
+{
+    SDL_Event event;
+    SDL_PollEvent(&event);
+    if (event.type == SDL_QUIT)
     {
-        for (int j = 0; j < 256; j++)
+        return false;
+    }
+    if (event.type == SDL_KEYDOWN)
+    {
+        uint32_t ticksNow = SDL_GetTicks();
+        if (SDL_TICKS_PASSED(ticksNow, ticksForNextKeyDown))
         {
-#ifdef TEST_SDL_LOCK_OPTS
-            // Alpha behaves like in the browser, so write proper opaque pixels.
-            int alpha = 255;
-#else
-            // To emulate native behavior with blitting to screen, alpha component is ignored. Test that it is so by outputting
-            // data (and testing that it does get discarded)
-            int alpha = (i + j) % 255;
-#endif
-            *((Uint32 *)screen->pixels + i * 256 + j) = SDL_MapRGBA(screen->format, i, j, 255 - i, alpha);
+            // Throttle keydown events for 10ms.
+            ticksForNextKeyDown = ticksNow + 10;
+            switch (event.key.keysym.sym)
+            {
+            case SDLK_UP:
+                center.y -= 1;
+                break;
+            case SDLK_DOWN:
+                center.y += 1;
+                break;
+            case SDLK_RIGHT:
+                center.x += 1;
+                break;
+            case SDLK_LEFT:
+                center.x -= 1;
+                break;
+            }
+            redraw();
         }
     }
-    if (SDL_MUSTLOCK(screen))
-        SDL_UnlockSurface(screen);
-    SDL_Flip(screen);
+    return true;
+}
 
-    printf("you should see a smoothly-colored square - no sharp lines but the square borders!\n");
-    printf("and here is some text that should be HTML-friendly: amp: |&| double-quote: |\"| quote: |'| less-than, greater-than, html-like tags: |<cheez></cheez>|\nanother line.\n");
+void run_main_loop()
+{
+#ifdef __EMSCRIPTEN__
+    emscripten_set_main_loop([]()
+                             { handle_events(); },
+                             0, true);
+#else
+    while (handle_events())
+        ;
+#endif
+}
+
+int main()
+{
+    SDL_Init(SDL_INIT_VIDEO);
+
+    SDL_CreateWindowAndRenderer(300, 300, 0, &window, &renderer);
+
+    redraw();
+    run_main_loop();
+
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
 
     SDL_Quit();
-
-    return 0;
 }
