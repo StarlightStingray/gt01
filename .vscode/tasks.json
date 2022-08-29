@@ -9,8 +9,7 @@
 			"command": "emcmake cmake .. && emmake make",
 			"group": "build",
 			"presentation": {
-				"reveal": "always",
-				"panel": "new"
+				"panel": "dedicated"
 			},
 			"options": {
 				"cwd": "build/"
